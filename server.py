@@ -44,6 +44,7 @@ async def analyze(file: UploadFile = File(...)):
     try:
         doc, report, version = await run_in_threadpool(run_with_versioning, save_path)
     except Exception as e:
+        import traceback; traceback.print_exc()
         raise HTTPException(500, str(e))
     return {
         "document": doc.model_dump(mode="json"),
