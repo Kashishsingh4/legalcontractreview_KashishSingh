@@ -219,7 +219,8 @@ def _load_finetuned_model():
         model = (
             AutoModelForSequenceClassification
             .from_pretrained(
-                FINETUNED_DIR
+                FINETUNED_DIR,
+                attn_implementation="eager",
             )
         )
 

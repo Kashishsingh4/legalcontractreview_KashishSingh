@@ -526,7 +526,8 @@ def _try_load_legalbert() -> _LegalBertBackend | None:
         model = (
             AutoModel
             .from_pretrained(
-                MODEL_NAME
+                MODEL_NAME,
+                attn_implementation="eager",
             )
         )
 

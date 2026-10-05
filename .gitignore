@@ -12,4 +12,8 @@ data/contract_review.db-shm
 *.zip
 # Temporary/generated files
 *.tmp
-*.log
+*.logfrontend/node_modules/
+frontend/dist/
+venv
+
+node_modules/
