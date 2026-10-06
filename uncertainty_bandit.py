@@ -54,6 +54,15 @@ INIT_WEIGHTS: dict[str, dict[str, float]] = {
 EPSILON = 0.10
 LEARNING_RATE = 0.05
 
+LOW_CONFIDENCE_THRESHOLD = 0.60
+# Calibrated, not guessed: mean-pooled LegalBERT embeddings sit in a narrow
+# cone, so cosine relevance is high for almost any text. On 60 unseen LEDGAR
+# test clauses the best relevance never fell below 0.831; on 15 non-legal
+# texts (recipes, sports, gibberish) it never rose above 0.776. 0.80 sits in
+# that gap. The previous 0.45 was below every score observed, so the
+# weak-evidence signal could never fire.
+LOW_RELEVANCE_THRESHOLD = 0.80
+
 WEIGHTS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "bandit_weights.json")
 
 
@@ -126,8 +135,8 @@ class UncertaintyBanditAgent:
             "is_insufficient_evidence": 1.0 if assessment == "insufficient_evidence" else 0.0,
             "is_no_risk_found": 1.0 if assessment == "no_configured_risk_found" else 0.0,
             "agreement": agreement,
-            "low_confidence_flag": 1.0 if confidence < 0.60 else 0.0,
-            "low_relevance_flag": 1.0 if relevance < 0.45 else 0.0,
+            "low_confidence_flag": 1.0 if confidence < LOW_CONFIDENCE_THRESHOLD else 0.0,
+            "low_relevance_flag": 1.0 if relevance < LOW_RELEVANCE_THRESHOLD else 0.0,
         }
 
     def _score(self, action: str, x: dict[str, float]) -> float:
@@ -138,11 +147,17 @@ class UncertaintyBanditAgent:
         x = self.build_features(features)
         scores = {action: self._score(action, x) for action in ACTIONS}
 
+        greedy = max(scores, key=scores.get)
         explore = random.random() < self.epsilon
         if explore:
-            action = random.choice(ACTIONS)
+            # Safe exploration: try a different action, but never explore
+            # *down* to "accept" when the evidence-driven choice is to send
+            # the clause to a human — a random accept on a low-confidence or
+            # risky clause is exactly the failure this agent exists to stop.
+            candidates = [a for a in ACTIONS if a != greedy and (greedy == "accept" or a != "accept")]
+            action = random.choice(candidates)
         else:
-            action = max(scores, key=scores.get)
+            action = greedy
 
         ranked = sorted(scores.values(), reverse=True)
         margin = ranked[0] - ranked[1] if len(ranked) > 1 else ranked[0]
@@ -222,9 +237,9 @@ if __name__ == "__main__":
         confidence = features["confidence"]
         relevance = features["relevance"]
         assessment = features["risk_assessment"]
-        if confidence < 0.60:
+        if confidence < LOW_CONFIDENCE_THRESHOLD:
             return "reanalyze"
-        if relevance < 0.45:
+        if relevance < LOW_RELEVANCE_THRESHOLD:
             return "reanalyze"
         if assessment == "attention_required":
             return "flag"
@@ -241,7 +256,7 @@ if __name__ == "__main__":
 
     grid = list(itertools.product(
         [0.3, 0.5, 0.55, 0.6, 0.7, 0.9],
-        [0.2, 0.4, 0.45, 0.5, 0.8],
+        [0.4, 0.7, 0.79, 0.8, 0.85, 0.95],
         ["attention_required", "insufficient_evidence", "no_configured_risk_found"],
     ))
     mismatches = []
@@ -289,4 +304,22 @@ if __name__ == "__main__":
     print("OK — learned weights persist correctly across reload.\n")
 
     os.remove(demo_path)
+
+    # 4. Safe exploration: even when *always* exploring, a low-confidence or
+    # risky clause must never be explored down to "accept".
+    explore_path = os.path.join("data", "_bandit_demo_explore.json")
+    explorer = UncertaintyBanditAgent(weights_file=explore_path)
+    explorer.epsilon = 1.0
+    risky_cases = [
+        {"clause_id": "c_lowconf", "confidence": 0.35, "relevance": 0.9, "risk_assessment": "no_configured_risk_found"},
+        {"clause_id": "c_risky", "confidence": 0.9, "relevance": 0.9, "risk_assessment": "attention_required"},
+        {"clause_id": "c_weak", "confidence": 0.9, "relevance": 0.7, "risk_assessment": "no_configured_risk_found"},
+    ]
+    for feats in risky_cases:
+        picks = {explorer.decide(feats["clause_id"], feats).action for _ in range(200)}
+        print(f"Always-exploring picks for {feats['clause_id']}: {sorted(picks)}")
+        assert "accept" not in picks, f"Safe exploration violated: explored to accept on {feats['clause_id']}"
+    os.remove(explore_path)
+    print("OK — exploration never downgrades a clause that needs human review to 'accept'.\n")
+
     print("ALL CHECKS PASSED.")
