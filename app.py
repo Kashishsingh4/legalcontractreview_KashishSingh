@@ -58,12 +58,20 @@ with st.sidebar:
             st.markdown(f"**{row['filename']}**  \n<span class='small'>{row['clause_count']} clauses · {status}</span>", unsafe_allow_html=True)
     else:
         st.caption("No contracts analyzed yet.")
-    st.caption("A new upload is automatically compared against stored contracts by content similarity — no manual matching needed.")
+    st.caption("Version comparison is optional — choose a previous contract below the uploader to compare against.")
 
 uploaded = st.file_uploader(
     "Upload Contract",
     type=["pdf", "docx"],
     help="Upload the contract you want to analyze.",
+)
+
+compare_options = {"": "No comparison — analyze this contract only"}
+compare_options.update({row["doc_id"]: f"{row['filename']} · {row['clause_count']} clauses" for row in past_analyses})
+compare_with = st.selectbox(
+    "Compare with a previous version (optional)",
+    options=list(compare_options),
+    format_func=compare_options.get,
 )
 
 if uploaded is None:
@@ -77,7 +85,7 @@ with open(save_path, "wb") as f:
 
 try:
     with st.spinner("Parsing, classifying, retrieving evidence and analyzing clauses..."):
-        doc, report, version = run_with_versioning(save_path)
+        doc, report, version = run_with_versioning(save_path, compare_with_doc_id=compare_with or None)
 except Exception as e:
     st.error(str(e))
     st.stop()
@@ -97,14 +105,14 @@ st.info(report.summary)
 st.divider()
 
 # ============================================================
-# VERSION COMPARISON — only rendered when this upload was auto-matched
-# to a previously stored analysis by content similarity.
+# VERSION COMPARISON — only rendered when the user chose a previous
+# version to compare against.
 # ============================================================
 if version is not None:
     st.header("🔄 Version Comparison")
     st.caption(
-        f"This contract was automatically matched to a previously analyzed document "
-        f"(content similarity: {version.match_score:.0%}) and compared against it."
+        f"Compared against the previous version you selected: "
+        f"{compare_options.get(version.matched_doc_id, version.matched_doc_id)}."
     )
 
     diff = version.diff

@@ -33,35 +33,35 @@ def run(file_path: str = "data/sample_document.json") -> tuple[Document, ReviewR
 def run_with_versioning(
     file_path: str = "data/sample_document.json",
     db_path: str = storage.DB_PATH,
+    compare_with_doc_id: str | None = None,
 ) -> tuple[Document, ReviewReport, VersionAnalysisResult | None]:
-    """Same as run(), plus: Database Storage + Version Workflow. If the
-    parsed document is a confident content-based match for a previously
-    stored analysis, diff the clauses, compare risk, and recommend the
-    safer version. Every analysis (matched or not) is then persisted so
-    future uploads can be compared against it.
+    """Same as run(), plus: Database Storage + Version Workflow. Version
+    comparison is opt-in: only when the caller names a previously stored
+    analysis (`compare_with_doc_id`) are the clauses diffed, risk compared,
+    and the safer version recommended. Uploads are never auto-matched
+    against stored contracts. Every analysis is persisted so it can be
+    chosen for comparison later.
 
     `db_path` is injectable (mirrors uncertainty_bandit.py's `weights_file`
     parameter) so tests can point storage at a throwaway file instead of the
     real database."""
     doc, report = run(file_path)
 
-    match = storage.find_best_matching_document(doc, db_path=db_path)
     version: VersionAnalysisResult | None = None
-    if match is not None:
-        matched_doc_id, match_score = match
-        prior = storage.load_analysis(matched_doc_id, db_path=db_path)
-        if prior is not None:
-            old_doc, old_report = prior
-            diff = version_diff.diff_documents(old_doc, doc)
-            comparison = risk_comparison.compare_versions(diff, old_report, report)
-            recommendation = version_recommendation.recommend_version(comparison)
-            version = VersionAnalysisResult(
-                matched_doc_id=matched_doc_id, match_score=match_score,
-                diff=diff, comparison=comparison, recommendation=recommendation,
-            )
+    if compare_with_doc_id:
+        prior = storage.load_analysis(compare_with_doc_id, db_path=db_path)
+        if prior is None:
+            raise ValueError(f"Previous analysis '{compare_with_doc_id}' was not found.")
+        old_doc, old_report = prior
+        diff = version_diff.diff_documents(old_doc, doc)
+        comparison = risk_comparison.compare_versions(diff, old_report, report)
+        recommendation = version_recommendation.recommend_version(comparison)
+        version = VersionAnalysisResult(
+            matched_doc_id=compare_with_doc_id, match_score=None,
+            diff=diff, comparison=comparison, recommendation=recommendation,
+        )
 
-    # Match against existing rows BEFORE saving, so the new document can
-    # never match itself.
+    # Save AFTER loading the chosen prior, so a new upload can't be compared with itself.
     storage.save_analysis(doc, report, db_path=db_path)
 
     return doc, report, version
