@@ -150,6 +150,11 @@ a { color: var(--primary); text-decoration: none; }
 .step-label { font-size: .75rem; color: var(--muted); }
 .step.active .step-label { color: var(--text); font-weight: 600; }
 
+.compare-picker { display: flex; flex-direction: column; gap: .4rem; margin-top: 1rem; text-align: left; }
+.compare-picker select {
+  font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: .6rem .75rem; max-width: 100%;
+}
 .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-top: 2rem; }
 .feature { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.1rem; }
 .feature-icon { font-size: 1.3rem; margin-bottom: .4rem; }
