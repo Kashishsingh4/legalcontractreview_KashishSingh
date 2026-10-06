@@ -228,6 +228,60 @@ function Section({ title, children, aside }) {
   );
 }
 
+// Which agentic branches the Supervisor actually ran for this clause.
+function AgentRoute({ finding }) {
+  const route = finding.evidence?.agent_route;
+  if (!route) return null;
+  const re = finding.evidence?.reanalysis;
+  const adv = finding.adversarial_review;
+
+  return (
+    <Section title="Agent route" aside={<span className="muted small">Supervisor Agent</span>}>
+      <div className="kv-row">
+        <div className="kv">
+          <span>Retrieval retry</span>
+          <b>{route.broadened_retrieval_retry ? `Ran (${route.retrieval_attempts} searches)` : "Not needed"}</b>
+          <div className="muted small">Final relevance {pct(finding.best_relevance)}</div>
+        </div>
+        <div className="kv">
+          <span>Re-analysis</span>
+          <b>{route.reanalysis ? (re?.adopted ? "Ran · adopted" : "Ran · original kept") : "Not triggered"}</b>
+          {re?.performed && (
+            <div className="muted small">
+              Checked "{re.category_checked}" (score {pct(re.category_checked_score)})
+            </div>
+          )}
+        </div>
+        <div className="kv">
+          <span>Adversarial review</span>
+          <b>{route.adversarial_review ? (adv?.still_concerning ? "Ran · concern upheld" : "Ran · concern disputed") : "Not triggered"}</b>
+          {adv?.source && <div className="muted small">Source: {adv.source}</div>}
+        </div>
+      </div>
+
+      {re?.performed && (
+        <Note tone={re.adopted ? "risk" : "neutral"}>
+          <b>Re-analysis</b>
+          <div className="small">
+            Risk: <span className="mono">{re.original_assessment}</span> →{" "}
+            <span className="mono">{re.reanalysis_assessment}</span> · broadened-search relevance{" "}
+            {pct(re.reanalysis_best_relevance)}
+          </div>
+          <div className="small">{re.outcome}</div>
+        </Note>
+      )}
+
+      {adv && (
+        <Note tone={adv.still_concerning ? "risk" : "ok"}>
+          <b>Adversarial review</b>
+          {adv.note && <div className="small">{adv.note}</div>}
+          {adv.missed_angle && <div className="small">Missed angle: {adv.missed_angle}</div>}
+        </Note>
+      )}
+    </Section>
+  );
+}
+
 function ClauseDetail({ clause, finding }) {
   const [showEn, setShowEn] = useState(false);
   const status = statusOf(finding);
@@ -269,6 +323,8 @@ function ClauseDetail({ clause, finding }) {
         </div>
       </div>
       {finding.review_reason && <p className="muted small">{finding.review_reason}</p>}
+
+      <AgentRoute finding={finding} />
 
       <Section
         title="Clause text"
