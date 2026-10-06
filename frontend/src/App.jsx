@@ -93,7 +93,7 @@ function HistoryDrawer({ open, onClose, history }) {
 
 /* ---------------- Upload / landing ---------------- */
 
-function Landing({ onFile, loading, error, fileName }) {
+function Landing({ onFile, loading, error, fileName, history, compareWith, setCompareWith }) {
   const inputRef = useRef(null);
   const [drag, setDrag] = useState(false);
   const [step, setStep] = useState(0);
@@ -167,13 +167,32 @@ function Landing({ onFile, loading, error, fileName }) {
         )}
       </div>
 
+      <div className="compare-picker">
+        <label className="small muted" htmlFor="compare-with">
+          Compare with a previous version (optional)
+        </label>
+        <select
+          id="compare-with"
+          value={compareWith}
+          disabled={loading}
+          onChange={(e) => setCompareWith(e.target.value)}
+        >
+          <option value="">No comparison — analyze this contract only</option>
+          {history.map((row) => (
+            <option key={row.doc_id} value={row.doc_id}>
+              {row.filename} · {row.clause_count} clauses
+            </option>
+          ))}
+        </select>
+      </div>
+
       {error && <Note tone="risk">{error}</Note>}
 
       <div className="features">
         {[
           ["🏷", "Clause classification", "LegalBERT predicts each clause's type with a confidence score."],
           ["🔎", "GraphRAG evidence", "Retrieves supporting legal knowledge with graph paths."],
-          ["🔄", "Version tracking", "Automatically diffs against earlier versions of the same contract."],
+          ["🔄", "Version tracking", "Optionally diff against an earlier version you choose."],
         ].map(([icon, t, d]) => (
           <div key={t} className="feature">
             <div className="feature-icon">{icon}</div>
@@ -414,7 +433,7 @@ function VersionView({ version }) {
         <div className="verdict">{verdict[0]}</div>
         <div>{recommendation.reasoning}</div>
         <div className="muted small" style={{ marginTop: 6 }}>
-          Matched a stored contract at {pct(version.match_score, 0)} similarity · reasoning source:{" "}
+          Compared with the previous version you selected · reasoning source:{" "}
           {recommendation.reasoning_source}
         </div>
       </Note>
@@ -517,7 +536,7 @@ function Results({ document: doc, report, version }) {
         </button>
         {version && (
           <button className={tab === "version" ? "on" : ""} onClick={() => setTab("version")}>
-            Version comparison <span className="pill">{pct(version.match_score, 0)}</span>
+            Version comparison
           </button>
         )}
         <button className={tab === "data" ? "on" : ""} onClick={() => setTab("data")}>
@@ -541,6 +560,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [fileName, setFileName] = useState("");
+  const [compareWith, setCompareWith] = useState("");
 
   const loadHistory = () =>
     fetch("/api/history")
@@ -559,6 +579,7 @@ export default function App() {
     setFileName(file.name);
     const form = new FormData();
     form.append("file", file);
+    if (compareWith) form.append("compare_with", compareWith);
     try {
       const res = await fetch("/api/analyze", { method: "POST", body: form });
       const text = await res.text();
@@ -577,6 +598,7 @@ export default function App() {
         );
       }
       setResult(data);
+      setCompareWith("");
       loadHistory();
     } catch (err) {
       setError(err.message);
@@ -601,7 +623,15 @@ export default function App() {
         {result ? (
           <Results {...result} />
         ) : (
-          <Landing onFile={analyze} loading={loading} error={error} fileName={fileName} />
+          <Landing
+            onFile={analyze}
+            loading={loading}
+            error={error}
+            fileName={fileName}
+            history={history}
+            compareWith={compareWith}
+            setCompareWith={setCompareWith}
+          />
         )}
       </main>
     </>

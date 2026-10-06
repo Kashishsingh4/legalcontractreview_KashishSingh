@@ -122,7 +122,7 @@ No arbitrary 0–100 score. Matches configured, source-cited trigger phrases (in
 `stubs.build_report` assembles the qualitative document-level report. `storage.py` persists every analysis to SQLite (`data/contract_review.db`, gitignored) so later uploads can be compared against it.
 
 ### Version Workflow ✅
-Triggered automatically — **no manual matching required**. When a new upload's content is similar enough to a stored analysis (word-level text similarity over clause + heading text, `storage.find_best_matching_document`), it's treated as a new version:
+Opt-in — uploads are **not** automatically compared against stored contracts. The user picks a previously analyzed contract ("Compare with a previous version") before uploading; only then is the new upload compared against it (`pipeline.run_with_versioning(..., compare_with_doc_id=...)`, API form field `compare_with`):
 - `version_diff.py` — clause-level added/removed/modified/unchanged, via global-greedy content-similarity matching (not naive per-row greedy)
 - `risk_comparison.py` — classifies each matched clause's risk change (increased/reduced/unchanged)
 - `version_recommendation.py` — deterministic safer-version decision (never LLM-gated) + restricted-Ollama reasoning text with a templated fallback

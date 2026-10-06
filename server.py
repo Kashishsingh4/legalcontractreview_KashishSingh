@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import os
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
@@ -33,7 +33,7 @@ def history():
 
 
 @app.post("/api/analyze")
-async def analyze(file: UploadFile = File(...)):
+async def analyze(file: UploadFile = File(...), compare_with: str | None = Form(None)):
     name = os.path.basename(file.filename or "")
     if not name.lower().endswith((".pdf", ".docx")):
         raise HTTPException(400, "Only PDF or DOCX files are supported.")
@@ -42,7 +42,9 @@ async def analyze(file: UploadFile = File(...)):
     with open(save_path, "wb") as f:
         f.write(await file.read())
     try:
-        doc, report, version = await run_in_threadpool(run_with_versioning, save_path)
+        doc, report, version = await run_in_threadpool(
+            run_with_versioning, save_path, compare_with_doc_id=compare_with or None
+        )
     except Exception as e:
         import traceback; traceback.print_exc()
         raise HTTPException(500, str(e))
